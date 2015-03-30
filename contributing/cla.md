@@ -78,6 +78,8 @@ Contact: ________________
 Name: Matthew Keeter  
 Contact: matt.j.keeter@gmail.com 
 
+--------------------------------------------------------------------------------
+
 Creative Commons License  
 This work is licensed under a Creative Commons Attribution 3.0 Unported License.
 
