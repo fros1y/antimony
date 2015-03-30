@@ -41,7 +41,8 @@ If moral rights apply to the Contribution, to the maximum extent permitted by la
 ### 2.5 Our Rights
 You acknowledge that We are not obligated to use Your Contribution as part of the Material and may decide to include any Contribution We consider appropriate.
 
-### 2.6 Reservation of Rights. Any rights not expressly [assigned or] licensed under this section are expressly reserved by You.
+### 2.6 Reservation of Rights
+Any rights not expressly [assigned or] licensed under this section are expressly reserved by You.
 
 ## 3. Agreement
 
