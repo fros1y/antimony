@@ -6,10 +6,6 @@ This contributor agreement ("Agreement") documents the rights granted by contrib
 ## 1. Definitions
 "You" (Individual) means the individual who Submits a Contribution to Us.
 
-"You" (Entity) means any Legal Entity on behalf of whom a Contribution has been received by Us. "Legal Entity" means an entity which is not a natural person. "Affiliates" means other Legal Entities that control, are controlled by, or under common control with that Legal Entity. For the purposes of this definition, "control" means (i) the power, direct or indirect, to cause the direction or management of such Legal Entity, whether by contract or otherwise, (ii) ownership of fifty percent (50%) or more of the outstanding shares or securities which vote to elect the management or other persons who direct such Legal Entity or (iii) beneficial ownership of such entity.
-
-"Contribution" means any work of authorship that is Submitted by You to Us in which You own or assert ownership of the Copyright.
-
 "Copyright" means all rights protecting works of authorship owned or controlled by You [or Your Affiliates], including copyright, moral and neighboring rights, as appropriate, for the full term of their existence including any extensions by You.
 
 "Material" means the work of authorship which is made available by Us to third parties. When this Agreement covers more than one software project, the Material means the work of authorship to which the Contribution was Submitted. After You Submit the Contribution, it may be included in the Material.
@@ -52,9 +48,7 @@ You confirm that:
 
 (b) You [or Your Affiliates] own the Copyright and patent claims covering the Contribution which are required to grant the rights under Section 2.
 
-(c)(Individual) The grant of rights under Section 2 does not violate any grant of rights which You have made to third parties, including Your employer. If You are an employee, You have had Your employer approve this Agreement or sign the Entity version of this document. If You are less than eighteen years old, please have Your parents or guardian sign the Agreement.
-
-(c)(Entity) The grant of rights under Section 2 does not violate any grant of rights which You or Your Affiliates have made to third parties.
+(c) The grant of rights under Section 2 does not violate any grant of rights which You have made to third parties, including Your employer. If You are an employee, You have had Your employer approve this Agreement or sign the Entity version of this document. If You are less than eighteen years old, please have Your parents or guardian sign the Agreement.
 
 ## 4. Disclaimer
 
