@@ -75,7 +75,7 @@ Name: __________________
 Contact: ________________
 
 ### Us
-Name: Matthew Keeter
+Name: Matthew Keeter  
 Contact: matt.j.keeter@gmail.com 
 
 Creative Commons License  
