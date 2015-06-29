@@ -1,0 +1,7 @@
+import fab
+
+title('Blob Merge')
+input('a', fab.types.Shape)
+input('b', fab.types.Shape)
+
+output('shape', fab.shapes.blob_merge(a, b)

@@ -208,6 +208,34 @@ def origin_xyz(a, x0, y0, z0, x1, y1, z1):
 
 ################################################################################
 
+def blob(x, y, z, a, b):
+    rsqr = "( (X-%(x)g)**2 + (Y-%(y)g)**2 + (Z-%(z)g)**2)" % locals()
+    return Shape("=(%(a)g * exp(-1 * %(b)g * %(rsqr)s));" % locals(),
+            x - 1, y - 1, z - 1, x + 1, y + 1, z + 1)
+
+def blob_merge(*blobs):
+    blobstr = "f0"
+    xmax = 0
+    xmin = 0
+    ymax = 0
+    ymin = 0
+    zmax = 0
+    zmin = 0
+
+    for blob in blobs:
+        xmax = max(blob.bounds.xmax, xmax)
+        ymax = max(blob.bounds.ymax, ymax)
+        zmax = max(blob.bounds.zmax, zmax)
+        xmin = min(blob.bounds.xmin, xmin)
+        ymin = min(blob.bounds.ymin, ymin)
+        zmin = min(blob.bounds.zmin, zmin)
+        blobstr = "+" + blobstr + blob.math
+
+    fn = "-f1" + blobstr
+    return Shape(fn, xmin, ymin, zmin, xmax, ymax, zmax)
+
+################################################################################
+
 @preserve_color
 def recenter(part, x, y, z):
     if not math.isinf(part.bounds.xmax) and not math.isinf(part.bounds.xmin):

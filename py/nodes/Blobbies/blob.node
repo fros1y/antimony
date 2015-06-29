@@ -1,0 +1,21 @@
+import fab
+
+title('Blob')
+input('x', float)
+input('y', float)
+input('z', float)
+input('a', float, 2)
+input('b', float, 1)
+
+output('blob', fab.shapes.blob(x, y, z, a, b))
+
+# UI
+fab.ui.wireframe([
+    (math.cos(i/36. * 2*math.pi) * a/2 + x,
+     math.sin(i/36. * 2*math.pi) * a/2 + y, z)
+    for i in range(36)], close=True)
+fab.ui.wireframe([(x,y,z-a/2), (x,y,z+a/2)])
+
+fab.ui.point(x, y, z)
+fab.ui.point(x, y, z + a/2, drag=(None, None, a))
+fab.ui.point(x, y, z - a/2, drag=(None, None, a))
