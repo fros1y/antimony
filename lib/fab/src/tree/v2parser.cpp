@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 #include <stdbool.h>
+#include <clocale>
 
 #include "fab/tree/v2parser.hpp"
 #include "fab/tree/tree.h"
@@ -40,6 +41,8 @@ bool v2parse(Node **result, const char* input, Node* X, Node* Y, Node *Z, NodeCa
         printf(ANSI_COLOR_BLUE "Parsing input:" ANSI_COLOR_RESET " \t'%s'\n");
         v2ParseTrace(stdout, "\t" ANSI_COLOR_YELLOW "\tParse trace:\t" ANSI_COLOR_RESET);
     #endif
+
+    setlocale(LC_NUMERIC,"C");  // Fix problems with atof() in period separating locales
 
     Env* locals = (Env*) malloc(sizeof(Env));
     locals->valid = true;
