@@ -8,10 +8,9 @@
 
 #include "app/app.h"
 
-#include "graph/node/node.h"
-#include "graph/node/root.h"
-#include "graph/datum/types/eval_datum.h"
-#include "graph/datum/datums/script_datum.h"
+#include "graph/script_node.h"
+#include "graph/graph.h"
+#include "graph/datum.h"
 
 #include "ui_main_window.h"
 #include "ui/main_window.h"
@@ -55,8 +54,6 @@ void MainWindow::setCentralWidget(QWidget* w)
     {
         e->customizeUI(ui);
         window_type = "Script";
-        connect(e->getDatum(), &ScriptDatum::destroyed,
-                this, &MainWindow::close);
     }
     else
     {
@@ -219,8 +216,12 @@ void MainWindow::populateNodeMenu(QMenu* menu, bool recenter, Viewport* v)
             if (regex.exactMatch(txt))
                 title = regex.capturedTexts()[1];
 
+        QString name = "n*";
+        if (title.size() > 0 && title.at(0).isLetter())
+            name = title.at(0).toLower() + QString("*");
         NodeConstructorFunction constructor =
-            [=](NodeRoot *r){ return ScriptNode(txt, r); };
+            [=](Graph *r){ return new ScriptNode(name.toStdString(),
+                                                 txt.toStdString(), r); };
         nodes[title] = QPair<QStringList, NodeConstructorFunction>(
                 split, constructor);
         node_titles.append(title);
@@ -246,13 +247,19 @@ void MainWindow::populateNodeMenu(QMenu* menu, bool recenter, Viewport* v)
 void MainWindow::populateMenu(QMenu* menu, bool recenter, Viewport* v)
 {
     // Hard-code important menu names to set their order.
-    for (auto c : {"2D", "3D", "2D → 3D", "CSG"})
+    for (auto c : {"2D", "3D", "2D → 3D", "3D → 2D", "CSG"})
         menu->addMenu(c);
     menu->addSeparator();
 
     populateNodeMenu(menu, recenter, v);
 
     menu->addSeparator();
+
     addNodeToMenu(QStringList(), "Script", menu, recenter,
-                  static_cast<NodeConstructor>(ScriptNode), v);
+                [](Graph *r){ return new ScriptNode("s*",
+                    "import fab\n\n"
+                    "title('script')\n"
+                    "input('r', float, 1)\n"
+                    "output('c', fab.shapes.circle(0, 0, r))",
+                    r); }, v);
 }

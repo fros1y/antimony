@@ -19,13 +19,15 @@ public:
      *  Returns a new reference to the given object or NULL.
      *  May throw Proxy::Exception to indicate a special error.
      */
-    virtual PyObject* pyGetAttr(std::string name, Downstream* caller) const=0;
+    virtual PyObject* pyGetAttr(std::string name, Downstream* caller,
+                                uint8_t flags) const=0;
 
     /*
      *  Attempts to set the given attribute.
      *  Returns true on success.
      */
-    virtual void pySetAttr(std::string name, PyObject* obj)=0;
+    virtual void pySetAttr(std::string name, PyObject* obj,
+                           uint8_t flags)=0;
 
     /*
      *  Record that the given Downstream looked up a particular name
@@ -87,7 +89,7 @@ public:
     template <class T>
     T* get(std::string n, const std::list<std::unique_ptr<T>>& ts) const
     {
-        static std::regex r("__([0-9]+)");
+        static std::regex r("__([[:digit:]]+)");
         std::smatch match;
         if (std::regex_match(n, match, r))
             return getByUID(std::stoull(match[1]), ts);

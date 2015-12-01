@@ -3,17 +3,25 @@
 
 #include <QGraphicsObject>
 
+#include "graph/watchers.h"
+
 class Datum;
 class DatumTextItem;
 class InputPort;
 class OutputPort;
 class NodeInspector;
 
-class InspectorRow : public QGraphicsObject
+class InspectorRow : public QGraphicsObject, DatumWatcher
 {
     Q_OBJECT
 public:
     explicit InspectorRow(Datum* d, NodeInspector* parent);
+
+    void trigger(const DatumState& state) override;
+
+    const static qreal LeftPadding; // padding between edge & input-port
+    const static qreal LabelPadding; // padding between label & datum-text
+    const static qreal TextPadding; // padding between datum-text & output-port
 
     InputPort* input;
     OutputPort* output;
@@ -23,6 +31,7 @@ public:
 
     void setWidth(float width);
     float minWidth() const;
+    float labelWidth() const;
 
 public slots:
     /*
@@ -37,7 +46,6 @@ signals:
 protected:
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
                QWidget *widget) override;
-    float labelWidth() const;
 
     friend class NodeInspector;
 };

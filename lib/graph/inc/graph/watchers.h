@@ -14,6 +14,7 @@ struct DatumState
 {
     std::string text;
     std::string repr;
+    char sigil;
     bool editable;
     bool valid;
     std::string error;
@@ -31,10 +32,6 @@ public:
 
 struct NodeState
 {
-    std::string script;
-    std::string error;
-    std::string output;
-    int error_lineno;
     bool name_valid;
     std::list<Datum*> datums;
 };
@@ -48,9 +45,27 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct ScriptState
+{
+    std::string script;
+    std::string error;
+    std::string output;
+    int error_lineno;
+};
+
+class ScriptWatcher
+{
+public:
+    virtual ~ScriptWatcher() {};
+    virtual void trigger(const ScriptState& state)=0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct GraphState
 {
     std::unordered_set<Node*> nodes;
+    std::unordered_set<Datum*> datums;
 };
 
 class GraphWatcher

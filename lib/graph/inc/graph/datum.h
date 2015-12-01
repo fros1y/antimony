@@ -9,13 +9,14 @@
 #include <list>
 
 #include "graph/types/downstream.h"
+#include "graph/types/watched.h"
 #include "graph/watchers.h"
 
 class Source;
 class Node;
 class DatumWatcher;
 
-class Datum : public Downstream
+class Datum : public Downstream, public Watched<DatumWatcher, DatumState>
 {
 public:
     explicit Datum(std::string name, std::string value,
@@ -52,17 +53,12 @@ public:
     /*
      *  Return the state (passed into callbacks)
      */
-    DatumState getState() const;
+    DatumState getState() const override;
 
     /*
      *  Returns a borrowed reference to the current value.
      */
     PyObject* currentValue() const { return value; }
-
-    /*
-     *  Sets the callback object.
-     */
-    void installWatcher(DatumWatcher* w) { watchers.push_back(w); }
 
     /*
      *  Returns true unless the leading character is an OUTPUT sigil.
@@ -123,6 +119,7 @@ public:
     static void installReducer(PyTypeObject* t, PyObject* f);
     static void clearReducers() { reducers.clear(); }
 
+    static const char SIGIL_NONE;
     static const char SIGIL_CONNECTION;
     static const char SIGIL_OUTPUT;
 
@@ -155,12 +152,6 @@ protected:
     PyObject* castToType(PyObject* value);
 
     /*
-     *  If this datum has a connection sigil, allow UID lookups.
-     *  (overrides Root pure virtual function)
-     */
-    bool allowLookupByUID() const override;
-
-    /*
      *  Handles post-processing of a link value.
      *
      *  Returns a new value (from extraction or reduction)
@@ -176,6 +167,15 @@ protected:
      */
     void writeLinkExpression(const std::unordered_set<const Datum*> links);
 
+    /*
+     *  Returns a formatted link expression in the form
+     *      __nodeID.__datumID
+     *      __parent.__datumID
+     *      __nodeID.__subgraph.__nodeID.__datumID
+     *  (depending on whether the datum shares a parent with us or not)
+     */
+    std::string formatLink(const Datum* upstream) const;
+
     const std::string name;
     const uint32_t uid;
 
@@ -187,8 +187,6 @@ protected:
     PyTypeObject* type;
 
     Node* parent;
-
-    std::list<DatumWatcher*> watchers;
 
     /*
      *  Sigils are single characters at the beginning of an expression
@@ -203,6 +201,7 @@ protected:
     static std::unordered_map<PyTypeObject*, PyObject*> reducers;
 
     friend class Node;
+    friend class ScriptNode;
     friend class Root;
     friend struct Script;
 };

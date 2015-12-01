@@ -7,23 +7,23 @@
 
 #include "ui/util/colors.h"
 
-#include "graph/datum/datum.h"
-#include "graph/datum/datums/script_datum.h"
+#include "graph/datum.h"
 
+const qreal InspectorRow::LeftPadding = 1;
+const qreal InspectorRow::LabelPadding = 10; // padding between label & datum-text
+const qreal InspectorRow::TextPadding = 5; // padding between datum-text & output-port
+         
 InspectorRow::InspectorRow(Datum* d, NodeInspector* parent)
     : QGraphicsObject(static_cast<QGraphicsItem*>(parent)),
-      input(d->hasInput()
-                ? new InputPort(d, static_cast<QGraphicsItem*>(this))
-                : NULL),
-      output(d->hasOutput()
-                ? new OutputPort(d, static_cast<QGraphicsItem*>(this))
-                : NULL),
-      label(new QGraphicsTextItem(d->objectName(), this)),
+      input(new InputPort(d, static_cast<QGraphicsItem*>(this))),
+      output(new OutputPort(d, static_cast<QGraphicsItem*>(this))),
+      label(new QGraphicsTextItem(
+                  QString::fromStdString(d->getName()), this)),
       editor(new DatumTextItem(d, this))
 {
     label->setDefaultTextColor(Colors::base04);
 
-    connect(static_cast<DatumTextItem*>(editor),
+    connect(editor,
             &DatumTextItem::boundsChanged,
             [=](){
             if(this->updateLayout())
@@ -35,28 +35,43 @@ InspectorRow::InspectorRow(Datum* d, NodeInspector* parent)
     connect(static_cast<DatumTextItem*>(editor),
             &DatumTextItem::shiftTabPressed,
             parent, &NodeInspector::focusPrev);
+
+    d->installWatcher(this);
+    trigger(d->getState());
+}
+
+void InspectorRow::trigger(const DatumState& state)
+{
+    if (state.sigil == Datum::SIGIL_OUTPUT)
+        input->hide();
+    else
+        input->show();
 }
 
 QRectF InspectorRow::boundingRect() const
 {
     const float height = editor->boundingRect().height();
-    const float width = 15      // Input port
+    const float width = 
+        LeftPadding
+        + Port::Width
         + labelWidth()    // Datum name
-        + 10        // Padding
+        + LabelPadding        // Padding
         + editor->boundingRect().width()    // Text field
-        + 5         // Padding
-        + 15;       // Output port
+        + TextPadding         // Padding
+        + Port::Width;       // Output port
     return QRectF(0, 0, width, height);
 }
 
 float InspectorRow::minWidth() const
 {
-    return 15       // Input port
+    return 
+           LeftPadding
+           + Port::Width
            + labelWidth() +  // Datum name
-           + 10     // Padding
+           + LabelPadding     // Padding
            + 150    // Text field
-           + 5      // Padding
-           + 15;    // Output port
+           + TextPadding      // Padding
+           + Port::Width;    // Output port
 }
 
 void InspectorRow::setWidth(float width)
@@ -78,7 +93,7 @@ bool InspectorRow::updateLayout()
 
     if (input)
     {
-        QPointF ipos(1, (bbox.height() - input->boundingRect().height()) / 2);
+        QPointF ipos(1 + LeftPadding, (bbox.height() - input->boundingRect().height()) / 2);
         if (input->pos() != ipos)
         {
             changed = true;
@@ -86,7 +101,7 @@ bool InspectorRow::updateLayout()
         }
     }
 
-    QPointF lpos(15 + label_width - label->boundingRect().width(),
+    QPointF lpos(LeftPadding + Port::Width + label_width - label->boundingRect().width(), // right justify
                  (bbox.height() - label->boundingRect().height())/2);
     if (label->pos() != lpos)
     {
@@ -94,7 +109,7 @@ bool InspectorRow::updateLayout()
         label->setPos(lpos);
     }
 
-    QPointF epos(15 + label_width + 10, 0);
+    QPointF epos(LeftPadding + Port::Width + label_width + LabelPadding, 0);
     if (editor->pos() != epos)
     {
         changed = true;
@@ -103,7 +118,7 @@ bool InspectorRow::updateLayout()
 
     if (output)
     {
-        QPointF opos(bbox.width() - output->boundingRect().width() - 1,
+        QPointF opos(bbox.width() - Port::Width,
                     (bbox.height() - output->boundingRect().height()) / 2);
         if (output->pos() != opos)
         {
@@ -112,6 +127,8 @@ bool InspectorRow::updateLayout()
         }
     }
 
+    if (changed)
+        prepareGeometryChange();
     return changed;
 }
 

@@ -1,10 +1,12 @@
 #include "graph/datum.h"
 #include "graph/node.h"
+#include "graph/graph_node.h"
 #include "graph/util.h"
 #include "graph/graph.h"
 #include "graph/watchers.h"
 #include "graph/proxy.h"
 
+const char Datum::SIGIL_NONE = 0;
 const char Datum::SIGIL_CONNECTION = 0x11;
 const char Datum::SIGIL_OUTPUT = 0x12;
 
@@ -56,12 +58,15 @@ Datum::~Datum()
 
 bool Datum::hasInput() const
 {
-    return !expr.empty() && (expr.front() != SIGIL_OUTPUT);
+    return !isOutput();
 }
 
 PyObject* Datum::getValue()
 {
-    PyObject* locals = parent->parent->proxyDict(this);
+    PyObject* locals = Proxy::makeProxyFor(
+            parent->parent, this,
+            isLink() ? Proxy::FLAG_UID_LOOKUP : 0);
+
     PyObject* globals = Py_BuildValue(
             "{sO}", "__builtins__", PyEval_GetBuiltins());
     parent->parent->loadDatumHooks(globals);
@@ -109,25 +114,50 @@ PyObject* Datum::castToType(PyObject* value)
 
 std::unordered_set<const Datum*> Datum::getLinks() const
 {
-    // Use a regex to find every uid.uid element in the list;
-    static std::regex id_regex("__([0-9]+)\\.__([0-9]+)");
-
-    std::smatch match;
-    size_t index = 0;
     std::unordered_set<const Datum*> out;
+    if (!isLink())
+        return out;
 
-    while (std::regex_search(expr.substr(index), match, id_regex))
+    // FIXME: #accidentallyquadratic
+    std::string links = expr.substr(2);  // skip initial SIGIL + "["
+    while (1)
     {
-        const uint64_t node_uid  = std::stoull(match[1]);
-        const uint64_t datum_uid = std::stoull(match[2]);
-
         auto graph = parent->parent;
-        if (auto node = graph->getNode(node_uid))
+
+        // Get our parent node, which is a node in the graph
+        // that this datum belongs to.
+        Node* node = links.find("__parent") == 0
+                ? graph->parentNode()
+                : graph->getNode(stoull(links.substr(2)));
+        links = links.substr(links.find(".") + 1);
+
+        // Pop into a subgraph if requested
+        if (links.find("__subgraph") == 0)
+        {
+            // We should only be entering our own subgraph (by construction)
+            assert(node == parent);
+            graph = static_cast<GraphNode*>(node)->getGraph();
+
+            links = links.substr(links.find(".") + 1);
+            node = graph->getNode(stoull(links.substr(2)));
+            links = links.substr(links.find(".") + 1);
+        }
+
+        // Extract datum UID
+        if (node)
+        {
+            const uint64_t datum_uid = std::stoull(links.substr(2));
             if (auto datum = node->getDatum(datum_uid))
                 out.insert(datum);
+        }
 
-        index += match[0].length();
+        const size_t next = links.find(",");
+        if (next == std::string::npos)
+            break;
+        else
+            links = links.substr(next + 1);
     }
+
     return out;
 }
 
@@ -161,22 +191,51 @@ void Datum::writeLinkExpression(const std::unordered_set<const Datum*> links)
         for (auto d : links)
         {
             if (expr.back() != '[')
-                expr += ", ";
-            expr += "__" + std::to_string(d->parent->uid) +
-                   ".__" + std::to_string(d->uid);
+                expr += ",";
+            expr += formatLink(d);
         }
         expr += "]";
     }
+}
+
+std::string Datum::formatLink(const Datum* upstream) const
+{
+    std::string id;
+
+    // First, check to see if the upstream comes from the
+    // same graph level as this datum
+    if (upstream->parent->parent == parent->parent)
+        id = "__" + std::to_string(upstream->parent->uid);
+
+    // Next, check to see if the upstream comes from a
+    // subgraph of this datum's parent node.
+    else if (upstream->parent->parent->parentNode() == parent)
+        id = "__" + std::to_string(parent->uid) + ".__subgraph.__" +
+             std::to_string(upstream->parent->uid);
+
+    // Finally, check to see if the upstream comes from the
+    // supergraph that contains this datum's parent node.
+    else if (upstream->parent == parent->parent->parentNode())
+        id = "__parent";
+
+    // Otherwise, we don't know what to do: datum links are only
+    // allowed to happen across one level of a graph.
+    else
+        assert(false);
+
+    id += ".__" + std::to_string(upstream->uid);
+
+    return id;
 }
 
 void Datum::installLink(const Datum* upstream)
 {
     assert(acceptsLink(upstream));
 
-    std::string id = "__" +  std::to_string(upstream->parent->uid) +
-                    ".__" + std::to_string(upstream->uid);
+    std::string id = formatLink(upstream);
+
     if (isLink())
-        setText(expr.substr(0, expr.size() - 1) + ", " + id + "]");
+        setText(expr.substr(0, expr.size() - 1) + "," + id + "]");
     else
         setText(SIGIL_CONNECTION + ("[" + id + "]"));
 }
@@ -287,7 +346,8 @@ DatumState Datum::getState() const
     Py_DECREF(r);
 
     return (DatumState){
-        trimmed.first, repr, !trimmed.second, valid, error, getLinks()};
+        trimmed.first, repr, trimmed.second ? expr.front() : SIGIL_NONE,
+        !trimmed.second, valid, error, getLinks()};
 }
 
 std::pair<std::string, bool> Datum::trimSigil(std::string e)
@@ -327,11 +387,6 @@ bool Datum::acceptsLink(const Datum* upstream) const
     // Otherwise, return true if we don't already a link to this datum.
     auto links = getLinks();
     return links.count(upstream) == 0;
-}
-
-bool Datum::allowLookupByUID() const
-{
-    return isLink();
 }
 
 bool Datum::isLink() const

@@ -4,13 +4,21 @@
 #include <QPlainTextEdit>
 #include "ui/script/editor.h"
 
+#include "graph/watchers.h"
+
 namespace Ui { class MainWindow; }
 
-class ScriptPane : public QWidget
+class ScriptPane : public QWidget, ScriptWatcher, GraphWatcher
 {
     Q_OBJECT
 public:
-    ScriptPane(ScriptDatum* datum, QWidget* parent);
+    ScriptPane(ScriptNode* node, QWidget* parent);
+
+    /*
+     *  The destructor calls uninstallWatcher for itself and the child
+     *  editor object (unless node is set to NULL)
+     */
+    ~ScriptPane();
 
     /*
      *  Connect to appropriate UI actions and modify menus.
@@ -18,9 +26,19 @@ public:
     void customizeUI(Ui::MainWindow* ui);
 
     /*
+     *  On node change, update stdout and error panes.
+     */
+    void trigger(const ScriptState& state) override;
+
+    /*
+     *  On graph change, delete self if the node is gone.
+     */
+    void trigger(const GraphState& state) override;
+
+    /*
      *  Returns the target datum.
      */
-    ScriptDatum* getDatum() const { return d; }
+    ScriptNode* getNode() const { return node; }
 
     /*
      *  Override paint event so that we can style the widget with CSS.
@@ -32,13 +50,11 @@ public:
      */
     void resizeEvent(QResizeEvent* event) override;
 
-protected slots:
-    void onDatumChanged();
-
 protected:
     void resizePanes();
 
-    ScriptDatum* d;
+    ScriptNode* node;
+    Graph* graph;
 
     ScriptEditor* editor;
     QPlainTextEdit* output;

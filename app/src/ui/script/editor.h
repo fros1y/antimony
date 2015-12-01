@@ -4,25 +4,32 @@
 #include <QPlainTextEdit>
 #include <QPointer>
 
-class ScriptDatum;
+#include "graph/watchers.h"
+
+class ScriptNode;
 namespace Ui { class MainWindow; }
 
 class ScriptEditor: public QPlainTextEdit
 {
     Q_OBJECT
 public:
-    explicit ScriptEditor(ScriptDatum* datum, QWidget* parent=NULL);
+    explicit ScriptEditor(ScriptNode* node, QWidget* parent=NULL);
 
     /*
      *  Connect to appropriate UI actions and modify menus.
      */
     void customizeUI(Ui::MainWindow* ui);
 
-    void setDatum(ScriptDatum* d);
+    /*
+     *  The ScriptEditor isn't a ScriptWatcher directly, but
+     *  its parent ScriptPane is and will call trigger when needed.
+     */
+    void trigger(const ScriptState& state);
+
+    void setNode(ScriptNode* n);
 
 public slots:
     void onTextChanged();
-    void onDatumChanged();
 
 protected slots:
     void onUndoCommandAdded();
@@ -44,7 +51,7 @@ protected:
      */
     void highlightError(int lineno);
 
-    QPointer<ScriptDatum> datum;
+    ScriptNode* node;
 };
 
 #endif

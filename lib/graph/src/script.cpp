@@ -1,13 +1,13 @@
 #include <Python.h>
 
 #include "graph/script.h"
-#include "graph/node.h"
+#include "graph/script_node.h"
 #include "graph/util.h"
 #include "graph/proxy.h"
 #include "graph/hooks/hooks.h"
 #include "graph/hooks/external.h"
 
-Script::Script(Node* parent)
+Script::Script(ScriptNode* parent)
     : error_lineno(-1), parent(parent)
 {
     // Nothing to do here
@@ -19,7 +19,7 @@ void Script::update()
     sources.clear();
     sources.insert(this);
 
-    const auto old_active = active;
+    const auto old_active = parent->childDatums();
     active.clear();
     error_lineno = -1;
     error.clear();
@@ -70,7 +70,7 @@ void Script::update()
     if (script != prev_script)
     {
         std::regex input("(.*input\\([^(),]+,[^(),]+),[^(),]+(\\).*)");
-        script = std::regex_replace(script, input, "$1$2");
+        script = std::regex_replace(script, input, std::string("$1$2"));
     }
     prev_script = script;
 
@@ -90,6 +90,14 @@ void Script::update()
     for (const auto& d : parent->datums)
         if (d->isOutput())
             d->sources.insert(sources.begin(), sources.end());
+
+    // Finally, update anything that's registered itself as a watcher
+    triggerWatchers();
+}
+
+ScriptState Script::getState() const
+{
+    return (ScriptState){script, error, output, error_lineno};
 }
 
 void Script::inject(std::string name, PyObject* value)

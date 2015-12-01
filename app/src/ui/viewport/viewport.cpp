@@ -21,14 +21,15 @@
 
 #include "ui_main_window.h"
 #include "ui/main_window.h"
+#include "ui/canvas/graph_scene.h"
 #include "ui/util/colors.h"
 
-#include "graph/datum/datum.h"
-#include "graph/node/node.h"
+#include "graph/datum.h"
+#include "graph/node.h"
+#include "graph/graph.h"
+
 #include "graph/node/serializer.h"
 #include "graph/node/deserializer.h"
-#include "graph/node/root.h"
-#include "graph/datum/link.h"
 
 #include "control/control.h"
 #include "control/proxy.h"
@@ -40,6 +41,8 @@ Viewport::Viewport(QGraphicsScene* scene, QWidget* parent)
     : QGraphicsView(parent), scene(scene),
       scale(100), pitch(0), yaw(0), angle_locked(false),
       view_selector(new ViewSelector(this)),
+      mouse_info(new QGraphicsTextItem("\n")),
+      scene_info(new QGraphicsTextItem()), hover(false),
       gl_initialized(false), ui_hidden(false)
 {
     setScene(scene);
@@ -50,6 +53,12 @@ Viewport::Viewport(QGraphicsScene* scene, QWidget* parent)
 
     auto gl = new QOpenGLWidget(this);
     setViewport(gl);
+
+    for (auto i : {mouse_info, scene_info})
+    {
+        i->setDefaultTextColor(Colors::base04);
+        scene->addItem(i);
+    }
 }
 
 Viewport::~Viewport()
@@ -120,6 +129,9 @@ void Viewport::resizeEvent(QResizeEvent* e)
 {
     Q_UNUSED(e);
     view_selector->setPos(width()/2 - 70, -height()/2 + 70);
+    mouse_info->setPos(-width()/2 + 10,
+                        height()/2 - mouse_info->boundingRect().height() - 10);
+    scene_info->setPos(-width()/2 + 10, -height()/2 + 10);
     setSceneRect(-width()/2, -height()/2, width(), height());
 }
 
@@ -171,8 +183,7 @@ QVector3D Viewport::sceneToWorld(QPointF p) const
 
 void Viewport::makeNodeAtCursor(NodeConstructorFunction f)
 {
-    auto n = f(App::instance()->getNodeRoot());
-    App::instance()->newNode(n);
+    auto n = f(App::instance()->getGraph());
     App::instance()->pushStack(new UndoAddNodeCommand(n));
 }
 
@@ -348,7 +359,7 @@ void Viewport::mouseMoveEvent(QMouseEvent *event)
         }
     }
 
-    scene->invalidate(QRect(), QGraphicsScene::ForegroundLayer);
+    updateInfo();
 }
 
 void Viewport::mouseReleaseEvent(QMouseEvent *event)
@@ -376,7 +387,7 @@ void Viewport::mouseReleaseEvent(QMouseEvent *event)
         for (auto p : proxies)
         {
             auto n = p->getNode();
-            QString desc = n->getName() + " (" + n->getTitle() + ")";
+            QString desc = QString::fromStdString(n->getName());// + " (" + n->getTitle() + ")";
 
             if (jump_to == NULL)
             {
@@ -432,6 +443,7 @@ void Viewport::setYaw(float y)
 {
     yaw = y;
     update();
+    updateInfo();
     scene->invalidate(QRect(),QGraphicsScene::ForegroundLayer);
     emit(viewChanged());
 }
@@ -440,6 +452,7 @@ void Viewport::setPitch(float p)
 {
     pitch = p;
     update();
+    updateInfo();
     scene->invalidate(QRect(),QGraphicsScene::ForegroundLayer);
     emit(viewChanged());
 }
@@ -457,28 +470,82 @@ void Viewport::wheelEvent(QWheelEvent *event)
 void Viewport::leaveEvent(QEvent* event)
 {
     Q_UNUSED(event);
-    scene->invalidate(QRect(),QGraphicsScene::ForegroundLayer);
+    hover = false;
+    updateInfo();
 }
 
+void Viewport::enterEvent(QEvent* event)
+{
+    Q_UNUSED(event);
+    hover = true;
+    updateInfo();
+}
 
 void Viewport::keyPressEvent(QKeyEvent *event)
 {
-    QGraphicsView::keyPressEvent(event);
-    if (event->isAccepted())
-        return;
-
-    if (event->key() == Qt::Key_A &&
-                (event->modifiers() & Qt::ShiftModifier))
+    switch (event->key())
     {
-        QObject* w = this;
-        while (!dynamic_cast<MainWindow*>(w))
-            w = w->parent();
-        Q_ASSERT(w);
-        QMenu* m = new QMenu(static_cast<MainWindow*>(w));
-        static_cast<MainWindow*>(w)->populateMenu(m, false, this);
+        case Qt::Key_Up:
+            if (event->modifiers() & Qt::ShiftModifier)
+                /* move camera z-down */
+                if (event->modifiers() & Qt::AltModifier) pan(QVector3D(0, 0, -1 / (8 * log(scale))));
+                /* camera zoom in */
+                else setScale(scale * 1.1);
+            /* move camera y-down */
+            else if (event->modifiers() & Qt::AltModifier) pan(QVector3D(0, -1 / (8 * log(scale)), 0));
+            /* rotate camera up */
+            else setPitch(fmin(0, fmin(M_PI, pitch + M_PI/16)));
+            break;
 
-        m->exec(QCursor::pos());
-        delete m;
+        case Qt::Key_Down:
+            if (event->modifiers() & Qt::ShiftModifier)
+                /* move camera z-up */
+                if (event->modifiers() & Qt::AltModifier) pan(QVector3D(0, 0, 1 / (8 * log(scale))));
+                /* camera zoom out */
+                else setScale(scale * 0.9);
+            /* move camera y-up */
+            else if (event->modifiers() & Qt::AltModifier) pan(QVector3D(0, 1 / (8 * log(scale)), 0));
+            /* rotate camera down */
+            else setPitch(fmin(0, fmax(-M_PI, pitch - M_PI/16)));
+            break;
+
+        case Qt::Key_Right:
+            /* move camera left */
+            if (event->modifiers() & Qt::AltModifier) pan(QVector3D(-1 / (8 * log(scale)), 0, 0));
+            /* move camera counter-clockwise */
+            else setYaw(fmod(yaw - M_PI / (8 * log(scale)), 2*M_PI));
+            break;
+
+        case Qt::Key_Left:
+            /* move camera right */
+            if (event->modifiers() & Qt::AltModifier) pan(QVector3D(1 / (8 * log(scale)), 0, 0));
+            /* move camera clockwise */
+            else setYaw(fmod(yaw + M_PI / (8 * log(scale)), 2*M_PI));
+            break;
+
+        /* hierarchical add menu */
+        case Qt::Key_A:
+            if (event->modifiers() & Qt::ShiftModifier)
+            {
+                QObject* w = this;
+                while (!dynamic_cast<MainWindow*>(w))
+                    w = w->parent();
+                Q_ASSERT(w);
+                QMenu* m = new QMenu(static_cast<MainWindow*>(w));
+                static_cast<MainWindow*>(w)->populateMenu(m, false, this);
+
+                m->exec(QCursor::pos());
+                delete m;
+            }
+            break;
+
+        /* spacebar menu */
+        case Qt::Key_Space:
+            break;
+
+        default:
+            QGraphicsView::keyPressEvent(event);
+            break;
     }
 }
 
@@ -514,10 +581,10 @@ void Viewport::pan(QVector3D d)
 
 void Viewport::drawBackground(QPainter* painter, const QRectF& rect)
 {
-    Q_UNUSED(rect);
+    QGraphicsView::drawBackground(painter, rect);
 
     painter->beginNativePainting();
-    glClearColor(0.0, 0.0, 0.0, 0.0);
+    glClearColor(0.0, 0.0, 0.0, 1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     for (auto d : findChildren<DepthImageItem*>())
@@ -551,11 +618,11 @@ void Viewport::drawAxes(QPainter* painter) const
     }
 }
 
-void Viewport::drawMousePosition(QPainter* painter) const
+void Viewport::updateInfo()
 {
     // Then add a text label in the lower-left corner
     // giving mouse coordinates (if we're near an axis)
-    if (getAxis().first)
+    if (getAxis().first && hover)
     {
         QPair<char, float> axis = getAxis();
         QPointF mouse_pos = mapToScene(mapFromGlobal(QCursor::pos()));
@@ -564,65 +631,62 @@ void Viewport::drawMousePosition(QPainter* painter) const
 
         auto p = sceneToWorld(mouse_pos);
 
-        QPointF a = sceneRect().bottomLeft() + QPointF(10, -25);
-        QPointF b = sceneRect().bottomLeft() + QPointF(10, -10);
         int value = axis.second * 200;
-        painter->setPen(QColor(value, value, value));
+        mouse_info->setDefaultTextColor(QColor(value, value, value));
+
         if (axis.first == 'z')
-        {
-            painter->drawText(a, QString("X: %1").arg(p.x()));
-            painter->drawText(b, QString("Y: %1").arg(p.y()));
-        }
+            mouse_info->setPlainText(QString("X: %1\nY: %2")
+                    .arg(p.x()).arg(p.y()));
         else if (axis.first == 'y')
-        {
-            painter->drawText(a, QString("X: %1").arg(p.x()));
-            painter->drawText(b, QString("Z: %1").arg(p.z()));
-        }
+            mouse_info->setPlainText(QString("X: %1\nZ: %2")
+                    .arg(p.x()).arg(p.z()));
         else if (axis.first == 'x')
-        {
-            painter->drawText(a, QString("Y: %1").arg(p.y()));
-            painter->drawText(b, QString("Z: %1").arg(p.z()));
-        }
-    }
-}
-
-void Viewport::drawInfo(QPainter* painter) const
-{
-    /* top left view info 'panel' */
-    painter->setPen(Colors::base04);
-    QPointF top_left_info = sceneRect().topLeft();
-
-    auto proxies = getProxiesAtPosition(_current_pos);
-
-    if (proxies.size() > 0)
-    {
-        auto n = proxies.first()->getNode();
-        QString desc = n->getName() + " (" + n->getTitle() + ")";
-
-        if (proxies.size() > 1)
-            painter->drawText(top_left_info + QPointF(10, 1*15),
-                    QString("Current: %1, (%2 more below)").arg(desc).arg(proxies.size()-1));
-        else
-            painter->drawText(top_left_info + QPointF(10, 1*15), QString("Current: %1").arg(desc));
+            mouse_info->setPlainText(QString("Y: %1\nZ: %2")
+                    .arg(p.y()).arg(p.z()));
     }
     else
     {
-        painter->drawText(top_left_info + QPointF(10, 1*15), QString("Current: <none>"));
+        mouse_info->setPlainText(" \n ");
     }
 
-    /* display scale, pitch, and yaw */
-    painter->drawText(top_left_info + QPointF(10, 2*15), QString("Scale: %1").arg(scale/100));
-    painter->drawText(top_left_info + QPointF(10, 3*15), QString("Pitch: %1").arg(getPitch()));
-    painter->drawText(top_left_info + QPointF(10, 4*15), QString("Yaw: %1").arg(getYaw()));
+    if (hover)
+    {
+        QString info;
+        auto proxies = getProxiesAtPosition(_current_pos);
+
+        if (proxies.size() > 0)
+        {
+            auto n = proxies.first()->getNode();
+            QString desc = QString::fromStdString(n->getName()); // + " (" + n->getTitle() + ")";
+
+            if (proxies.size() > 1)
+                info = QString("Current: %1, (%2 more below)")
+                    .arg(desc).arg(proxies.size()-1);
+            else
+                info = QString("Current: %1").arg(desc);
+        }
+        else
+        {
+            info = QString("Current: <none>");
+        }
+
+        /* display scale, pitch, and yaw */
+        info += QString("\nScale: %1").arg(scale/100);
+        info += QString("\nPitch: %1").arg(getPitch());
+        info += QString("\nYaw: %1").arg(getYaw());
+
+        scene_info->setPlainText(info);
+    }
+    else
+    {
+        scene_info->setPlainText("");
+    }
 }
 
 void Viewport::drawForeground(QPainter* painter, const QRectF& rect)
 {
-    Q_UNUSED(rect);
-
+    QGraphicsView::drawForeground(painter, rect);
     drawAxes(painter);
-    drawMousePosition(painter);
-    drawInfo(painter);
 }
 
 void Viewport::onCopy()
@@ -631,18 +695,14 @@ void Viewport::onCopy()
         if (auto proxy = dynamic_cast<ControlProxy*>(i))
         {
             auto n = proxy->getControl()->getNode();
-            Q_ASSERT(dynamic_cast<NodeRoot*>(n->parent()));
-            auto p = static_cast<NodeRoot*>(n->parent());
-
-            NodeRoot temp_root;
-            n->setParent(&temp_root);
             auto data = new QMimeData();
+            const auto inspectors =
+                App::instance()->getGraphScene()->inspectorPositions();
             data->setData("sb::viewport",
-                    QJsonDocument(SceneSerializer(&temp_root).run()).toJson());
-            n->setParent(p);
+                    QJsonDocument(SceneSerializer::serializeNode(
+                            n, inspectors)).toJson());
 
             QApplication::clipboard()->setMimeData(data);
-            return;
         }
 }
 
@@ -651,20 +711,19 @@ void Viewport::onCut()
     for (auto i : scene->selectedItems())
         if (auto proxy = dynamic_cast<ControlProxy*>(i))
         {
-            auto n = proxy->getControl()->getNode();
-            Q_ASSERT(dynamic_cast<NodeRoot*>(n->parent()));
-            auto p = static_cast<NodeRoot*>(n->parent());
+            if (auto c = proxy->getControl())
+            {
+                auto n = c->getNode();
+                auto data = new QMimeData();
+                const auto inspectors =
+                    App::instance()->getGraphScene()->inspectorPositions();
+                data->setData("sb::viewport",
+                        QJsonDocument(SceneSerializer::serializeNode(
+                                n, inspectors)).toJson());
 
-            NodeRoot temp_root;
-            n->setParent(&temp_root);
-            auto data = new QMimeData();
-            data->setData("sb::viewport",
-                    QJsonDocument(SceneSerializer(&temp_root).run()).toJson());
-            n->setParent(p);
-
-            QApplication::clipboard()->setMimeData(data);
-            proxy->getControl()->deleteNode("'cut'");
-            return;
+                QApplication::clipboard()->setMimeData(data);
+                proxy->getControl()->deleteNode("'cut'");
+            }
         }
 }
 
@@ -673,16 +732,38 @@ void Viewport::onPaste()
     auto data = QApplication::clipboard()->mimeData();
     if (data->hasFormat("sb::viewport"))
     {
-        NodeRoot temp_root;
-        SceneDeserializer ds(&temp_root);
-        ds.run(QJsonDocument::fromJson(data->data("sb::viewport")).object());
+        auto g = App::instance()->getGraph();
+        const uint64_t new_uid = g->getUIDs(1).front();
 
-        auto n = temp_root.findChild<Node*>();
-        n->setParent(App::instance()->getNodeRoot());
-        n->updateName();
+        // Update this node's UID and store the change in uid_map
+        auto n = QJsonDocument::fromJson(
+                data->data("sb::viewport")).object();
 
-        App::instance()->newNode(n);
-        App::instance()->pushStack(new UndoAddNodeCommand(n, "'paste'"));
+        n["uid"] = int(new_uid);
+
+        auto name = n["name"].toString();
+        if (!g->isNameUnique(name.toStdString()))
+        {
+            // Trim trailing numbers from the node's name
+            while (name.at(name.size() - 1).isNumber())
+                name = name.left(name.size() - 1);
+            if (name.isEmpty())
+                name = "n";
+            // Then use the remaining string as a prefix
+            n["name"] = QString::fromStdString(g->nextName(name.toStdString()));
+        }
+
+        // Deserialize this node
+        SceneDeserializer::Info ds;
+        SceneDeserializer::deserializeNode(n, g, &ds);
+
+        // Update the inspector positions by shifting a bit down and over
+        for (auto& i : ds.inspectors)
+            i += QPointF(10, 10);
+        App::instance()->getGraphScene()->setInspectorPositions(ds.inspectors);
+
+        App::instance()->pushStack(
+                new UndoAddNodeCommand(g->childNodes().back(), "'paste'"));
     }
 }
 
@@ -715,6 +796,7 @@ void Viewport::setCenter(QVector3D c)
 {
     center = c;
     update();
+    updateInfo();
     scene->invalidate(QRect(), QGraphicsScene::ForegroundLayer);
     emit(viewChanged());
 }
@@ -723,6 +805,7 @@ void Viewport::setScale(float s)
 {
     scale = s;
     update();
+    updateInfo();
     scene->invalidate(QRect(), QGraphicsScene::ForegroundLayer);
     emit(viewChanged());
 }
