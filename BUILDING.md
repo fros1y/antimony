@@ -28,6 +28,20 @@ make -j8
 
 open app/Antimony.app
 ```
+### Troubleshooting
+If you have installed Homebrew in a non-standard directory like `~/.homebrew`
+(the default is `/usr/local`), you'll need to provide a path to your Homebrew
+files:
+```
+export BREW_HOME=/Users/yourusername/.homebrew
+
+$BREW_HOME/Cellar/qt5/5.*/bin/qmake ../qt/antimony.pro
+make -j8
+```
+
+If you need to further adjust your library paths, Mac specific settings
+can be found in `qt/libpng.pri` and `qt/python.pri`
+
 Note: If `make -j8` exits with an "Error 2" just run `make -j8` again to succeed.
 
 Linux
@@ -92,4 +106,3 @@ desktop environment (e.g. `gnome-session-flashback`), run
 sudo apt-get remove appmenu-qt5
 ```
 to make it appear.
-
